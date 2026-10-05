@@ -5,12 +5,25 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: ENVIRONMENT.googleGenAIKey });
 
-export async function handleChat() {
-  const response = await ai.models.generateContent({
+export async function handleChat(message: string): Promise<string> {
+  // const response = await ai.models.generateContent({
+  //   model: "gemini-3-flash-preview",
+  //   contents: message,
+  //   config: {},
+  // });
+
+  // return response.text;
+
+  const interaction = await ai.interactions.create({
     model: "gemini-3-flash-preview",
-    contents: "bwaaaaa",
-    config: {},
+    input: message,
   });
 
-  return response.text;
+  const text = interaction.output_text?.trim();
+
+  if (!text) {
+    throw new Error("AI didn't returning text response.");
+  }
+
+  return text;
 }
