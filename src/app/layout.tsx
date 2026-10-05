@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Figtree, Outfit } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import QueryProvider from "@/providers/query-client";
+import { Toaster } from "@/components/ui/sonner";
 
 const outfitHeading = Outfit({
   subsets: ["latin"],
@@ -45,7 +47,12 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <QueryProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster position="top-right" />
+          </TooltipProvider>
+        </QueryProvider>
       </body>
     </html>
   );

@@ -1,1 +1,9 @@
-export { cn } from "cn"
+export { cn } from "cn";
+
+export function convertToIDR(value: number) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
