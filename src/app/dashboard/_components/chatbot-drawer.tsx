@@ -11,7 +11,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { handleChat, handleChatWithThinking } from "@/features/ai/chat";
+import { handleChatStreaming } from "@/features/ai/chat";
 import { cn } from "@/lib/utils";
 import { BotIcon, ChevronDownIcon, EllipsisIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -23,51 +23,104 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Conversation } from "@/app/types/ai";
 
 export default function ChatbotDrawer() {
   const chatRef = useRef<HTMLDivElement>(null);
-  const [conversation, setConversation] = useState<
-    {
-      role: string;
-      parts: {
-        text: string;
-        thought?: boolean;
-      }[];
-    }[]
-  >([]);
+  const [conversation, setConversation] = useState<Conversation[]>([]);
+  const [isThinking, setIsThinking] = useState<boolean>(false);
+
+  // const { mutate: handleChatMutation, isPending } = useMutation({
+  //   mutationFn: ({
+  //     isThinking,
+  //   }: {
+  //     isThinking: boolean;
+  //   }) => handleChat(conversation, isThinking),
+  //   onSuccess: (response) => {
+  //     let parts: {
+  //       text: string;
+  //       thought?: boolean;
+  //     }[] = [];
+
+  //     if (response?.thought?.trim()) {
+  //       parts = [
+  //         ...parts,
+  //         { thought: true, text: response?.thought || "Failure Happen" },
+  //       ];
+  //     }
+
+  //     const botMessage = {
+  //       role: "model",
+  //       parts: [...parts, { text: response?.answer || "Failure Happen" }],
+  //     };
+  //     setConversation((prev) => [...prev, botMessage]);
+  //   },
+  //   onError: (error) => {
+  //     const botMessage = {
+  //       role: "model",
+  //       parts: [{ text: "Failure Happen : " + error.message }],
+  //     };
+  //     setConversation((prev) => [...prev, botMessage]);
+  //   },
+  // });
 
   const { mutate: handleChatMutation, isPending } = useMutation({
-    mutationFn: handleChat,
-    onSuccess: (response) => {
-      const botMessage = {
-        role: "model",
-        parts: [{ text: response || "Failure Happen" }],
-      };
-      setConversation((prev) => [...prev, botMessage]);
-    },
-    onError: (error) => {
-      const botMessage = {
-        role: "model",
-        parts: [{ text: "Failure Happen : " + error.message }],
-      };
-      setConversation((prev) => [...prev, botMessage]);
-    },
-  });
+    mutationFn: async ({ isThinking }: { isThinking: boolean }) => {
+      if (isThinking) {
+        setConversation((prev) => [
+          ...prev,
+          { role: "model", parts: [{ thought: true, text: "" }, { text: "" }] },
+        ]);
+        const response = await handleChatStreaming(conversation, isThinking);
+        for await (const chunk of response) {
+          setConversation((prev) => {
+            const newConversation = [...prev];
+            const lastIndex = newConversation.length - 1;
 
-  const {
-    mutate: handleChatWithThinkingMutation,
-    isPending: isPendingChatWithThinking,
-  } = useMutation({
-    mutationFn: handleChatWithThinking,
-    onSuccess: (response) => {
-      const botMessage = {
-        role: "model",
-        parts: [
-          { thought: true, text: response?.thought || "Failure Happen" },
-          { text: response?.answer || "Failure Happen" },
-        ],
-      };
-      setConversation((prev) => [...prev, botMessage]);
+            const parts = newConversation[lastIndex].parts;
+
+            newConversation[lastIndex] = {
+              ...newConversation[lastIndex],
+              parts: [
+                {
+                  ...parts[0],
+                  text: chunk.startsWith("[thought]")
+                    ? parts[0].text + chunk.replace("[thought]", "")
+                    : parts[0].text,
+                },
+                {
+                  text: !chunk.startsWith("[thought]")
+                    ? parts[1].text + chunk
+                    : parts[1].text,
+                },
+              ],
+            };
+
+            return newConversation;
+          });
+        }
+      } else {
+        setConversation((prev) => [
+          ...prev,
+          { role: "model", parts: [{ text: "" }] },
+        ]);
+        const response = await handleChatStreaming(conversation, isThinking);
+        for await (const chunk of response) {
+          setConversation((prev) => {
+            const newConversation = [...prev];
+            const lastIndex = newConversation.length - 1;
+
+            newConversation[lastIndex] = {
+              ...newConversation[lastIndex],
+              parts: [
+                { text: newConversation[lastIndex].parts[0].text + chunk },
+              ],
+            };
+
+            return newConversation;
+          });
+        }
+      }
     },
     onError: (error) => {
       const botMessage = {
@@ -79,12 +132,14 @@ export default function ChatbotDrawer() {
   });
 
   function sendMessage(message: string) {
+    if (isPending || !message.trim()) return;
+
     const newMessage = {
       role: "user",
       parts: [{ text: message }],
     };
     setConversation((prev) => [...prev, newMessage]);
-    handleChatWithThinkingMutation(message);
+    handleChatMutation({ isThinking });
   }
 
   useEffect(() => {
@@ -111,11 +166,9 @@ export default function ChatbotDrawer() {
         <DrawerHeader className="flex flex-row justify-between">
           <div>
             <DrawerTitle className="text-primary font-bold">
-              AI Financial Advisor
+              AI Advisor
             </DrawerTitle>
-            <DrawerDescription>
-              Get personalized financial advice.
-            </DrawerDescription>
+            <DrawerDescription>Get personalized advice.</DrawerDescription>
           </div>
           <DrawerClose asChild>
             <Button variant="outline" size="icon">
@@ -157,7 +210,7 @@ export default function ChatbotDrawer() {
                               <Collapsible>
                                 <CollapsibleTrigger asChild>
                                   <Button variant="ghost">
-                                    Show AI thinking flow..
+                                    show AI thinking flow
                                     <ChevronDownIcon />
                                   </Button>
                                 </CollapsibleTrigger>
@@ -179,7 +232,7 @@ export default function ChatbotDrawer() {
                   </div>
                 </div>
               ))}
-              {isPendingChatWithThinking && (
+              {isPending && (
                 <div className="flex items-center animate-pulse">
                   <EllipsisIcon className="size-8 text-primary/50" />
                 </div>
@@ -193,7 +246,11 @@ export default function ChatbotDrawer() {
           )}
         </div>
         <DrawerFooter>
-          <ChatbotTextArea sendMessage={sendMessage} />
+          <ChatbotTextArea
+            isThinking={isThinking}
+            setIsThinking={setIsThinking}
+            sendMessage={sendMessage}
+          />
         </DrawerFooter>
       </DrawerContent>
     </Drawer>
